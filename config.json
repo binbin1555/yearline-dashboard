@@ -1,0 +1,18 @@
+{
+  "_说明": "改这个文件即可调整推送行为。start_date / initial_capital 是推送使用的口径；网页底部也能改，但只存在浏览器本地，只影响网页显示，不影响推送。",
+
+  "start_date": "2026-08-07",
+  "initial_capital": 1850000,
+
+  "names": {
+    "cyb": "创业板50",
+    "hl": "红利"
+  },
+
+  "_page_url说明": "发布到 GitHub Pages 之后，把下面这行改成你的真实网址，Bark 推送就能点击直达。没改之前推送里不会带链接，不影响其它功能。",
+  "page_url": "",
+
+  "lookback_days": 90,
+  "alert_stale_days": 10,
+  "final_after_hour": 17
+}

@@ -1,0 +1,7 @@
+# 强制以 LF 入库。Windows 上的 CRLF 会让 GitHub Actions(Ubuntu) 的 run: 脚本块
+# 带上 \r，报 "$'\r': command not found"。这是最常见的跨平台 CI 故障。
+* text=auto eol=lf
+*.json text eol=lf
+*.py   text eol=lf
+*.js   text eol=lf
+*.yml  text eol=lf

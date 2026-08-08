@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<title>年线轮动 · 策略看板</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📊</text></svg>" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="boot" class="boot">正在载入数据…</div>
+
+<main id="app" hidden>
+
+  <!-- 需要操作时才出现，点击确认后消失（仅影响显示，不影响计算） -->
+  <section id="alert" class="card alert" hidden>
+    <div class="alert-h">
+      <span id="alert-pill" class="pill">需要操作</span>
+      <strong id="alert-title"></strong>
+    </div>
+    <p id="alert-body"></p>
+    <p class="sub">系统已按 T+1 收盘自动计入。此按钮只是提醒你别忘了下单，不影响任何计算与推送。</p>
+    <button id="alert-ack" type="button" class="btn">我已完成操作</button>
+  </section>
+
+  <!-- 顶部：下一步操作 -->
+  <section class="card">
+    <div class="ttl">下一步操作 <span id="pos-chip" class="chip on"></span></div>
+    <div id="tracks"></div>
+  </section>
+
+  <!-- 账户 -->
+  <section class="card">
+    <div class="ttl">账户 <span id="range-note" class="ttl-note"></span></div>
+    <div id="stats" class="stats"></div>
+  </section>
+
+  <!-- 持仓与档位 -->
+  <section class="card">
+    <div class="ttl">持仓与档位</div>
+    <div id="holdings" class="rows"></div>
+  </section>
+
+  <!-- 近期动作 -->
+  <section class="card">
+    <div class="ttl">近期动作</div>
+    <div id="events" class="rows"></div>
+  </section>
+
+  <!-- 底部设置 -->
+  <footer class="foot">
+    <span id="data-note"></span>
+    <button id="cfg-toggle" type="button" class="linkbtn" aria-expanded="false">设置</button>
+    <div id="cfg" class="cfg" hidden>
+      <label>初始资金 <input id="cfg-capital" type="number" min="1000" step="1000" inputmode="numeric" /></label>
+      <label>启动时间 <input id="cfg-start" type="date" /></label>
+      <button id="cfg-apply" type="button" class="btn small">重新计算</button>
+      <button id="cfg-reset" type="button" class="linkbtn">恢复默认</button>
+      <span id="cfg-hint" class="hint"></span>
+    </div>
+  </footer>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
