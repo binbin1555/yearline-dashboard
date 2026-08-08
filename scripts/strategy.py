@@ -198,45 +198,68 @@ def run(daily, start_date, capital=100000.0):
             "entry_px": entry_px, "took_profit": took}
 
 
-def next_triggers(daily, res):
-    """页面顶部『下一步操作』。返回按紧迫度排序的列表。"""
+def _clamp(x, lo=0.0, hi=1.0):
+    return max(lo, min(hi, x))
+
+
+def next_triggers(daily, res, names=None):
+    """下一步会触发什么。**按接近程度降序**，第一条就是最该盯的那个。
+
+    与 app.js 的 nextTriggers 必须保持一致：页面和推送要给出同样的排序，
+    否则会出现「页面说先看创业板、推送却先列红利」的矛盾。
+    """
+    names = names or {}
+    n_cyb = names.get("cyb", "创业板50")
+    n_hl = names.get("hl", "红利")
     i = len(daily["dates"]) - 1
     ma, av, mah = indicators(daily)
     cyb, hl, amt = daily["cyb_sig"], daily["hl_sig"], daily["cyb_amt"]
     out = []
 
     if res["state"] == "CYB":
-        line = ma[i]
+        buf = cyb[i] / ma[i] - 1
         out.append({"key": "cyb_exit", "label": "创业板出场",
-                    "cond": "收盘跌破 MA250 %.2f" % line,
-                    "distance": line / cyb[i] - 1,
-                    "action": "清仓创业板50，转入红利腿"})
+                    "action": "清仓%s，转入%s腿" % (n_cyb, n_hl),
+                    "cond": "收盘跌破 MA250 %.2f" % ma[i],
+                    "short": "尚有 %.2f%% 缓冲" % (buf * 100),
+                    "progress": 1 - _clamp(buf / 0.20)})
         if not res["took_profit"] and res["entry_px"]:
             tgt = res["entry_px"] * (1 + TAKE_PROFIT)
-            out.append({"key": "cyb_half", "label": "创业板止盈",
-                        "cond": "指数涨至 %.2f（段内 +80%%）" % tgt,
-                        "distance": tgt / cyb[i] - 1,
-                        "action": "卖出一半创业板50"})
+            g = cyb[i] / res["entry_px"] - 1
+            out.append({"key": "cyb_half", "label": "创业板止盈一半",
+                        "action": "卖出一半%s" % n_cyb,
+                        "cond": "本段涨幅达 +80%%，即指数涨到 %.2f" % tgt,
+                        "short": "本段已涨 %.1f%%" % (g * 100),
+                        "progress": _clamp(g / TAKE_PROFIT)})
     else:
-        need = VOL_K * av[i] if av[i] else None
-        gap = ma[i] / cyb[i] - 1
+        # 进场需同时满足「站上均线」和「放量」，取更难的那个作为距离
+        ratio = (amt[i] / av[i]) if av[i] else None
+        price_prog = _clamp(cyb[i] / ma[i])
+        vol_prog = _clamp(ratio / VOL_K) if ratio else 0.0
+        vol_binding = vol_prog <= price_prog
         out.append({"key": "cyb_entry", "label": "创业板进场",
-                    "cond": ("站上 MA250 %.2f 且成交额达 %.0f 亿（当前 %.0f 亿，%.2f×）"
-                             % (ma[i], need / 1e4, amt[i] / 1e4, amt[i] / av[i]) if need else "数据不足"),
-                    "distance": gap if gap > 0 else 0.0,
-                    "ratio": (amt[i] / av[i]) if av[i] else None,
-                    "action": "全仓买入创业板50"})
+                    "action": "全仓买入%s" % n_cyb,
+                    "cond": ("已站上 MA250 %.2f，只差放量" % ma[i]) if cyb[i] > ma[i]
+                            else ("需站上 MA250 %.2f，且成交额达 1.30×" % ma[i]),
+                    "short": ("量能 %.2f×／需 1.30×" % ratio) if vol_binding and ratio
+                             else ("再涨 %.2f%%" % ((ma[i] / cyb[i] - 1) * 100)),
+                    "progress": min(price_prog, vol_prog)})
         tier = res["tier"]
         if tier < 3 and mah[i]:
             t = TIERS[tier]
             price = mah[i] * t
             out.append({"key": "hl_buy", "label": "红利第 %d 档买入" % (tier + 1),
+                        "action": "买入 1/3 仓%s" % n_hl,
                         "cond": "跌破 %.2f（MA250 %.0f%%）" % (price, -round((1 - t) * 100)),
-                        "distance": price / hl[i] - 1,
-                        "action": "买入 1/3 仓红利"})
+                        "short": "再跌 %.2f%%" % abs((price / hl[i] - 1) * 100),
+                        "progress": _clamp((mah[i] - hl[i]) / (mah[i] - price))})
         if tier > 0 and mah[i]:
+            need = mah[i] / hl[i] - 1
             out.append({"key": "hl_sell", "label": "红利止盈",
+                        "action": "清空全部%s仓位，回到现金" % n_hl,
                         "cond": "涨回 MA250 %.2f" % mah[i],
-                        "distance": mah[i] / hl[i] - 1,
-                        "action": "清空全部红利仓位，回到现金"})
+                        "short": "再涨 %.2f%%" % (need * 100),
+                        "progress": _clamp(1 - need / 0.10)})
+
+    out.sort(key=lambda x: -x["progress"])
     return out

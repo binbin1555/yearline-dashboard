@@ -57,6 +57,9 @@ def bark(title, body, level="active", group="年线轮动", url=None):
 
 
 def pct(x, digits=2):
+    # 零值不加正负号，避免出现 "+0.00%" 这种别扭写法（与 app.js 的 pct 保持一致）
+    if abs(x) < 5e-5:
+        return ("%." + str(digits) + "f%%") % 0.0
     return ("%+." + str(digits) + "f%%") % (x * 100)
 
 
@@ -85,17 +88,14 @@ def build_body(cfg, res, triggers, daily):
     else:
         lines.append("最大回撤：%s（运行未满一月，年化暂不显示）" % pct(res["max_drawdown"]))
 
-    lines.append("")
-    for t in triggers[:3]:
-        d = t.get("distance")
-        if t["key"] == "cyb_entry":
-            r = t.get("ratio")
-            tail = "量能 %.2f×／需 1.30×" % r if r else ""
-            arrow = "再涨 %.2f%%" % (d * 100) if d and d > 0 else "已站上均线"
-            lines.append("· %s：%s，%s → %s" % (t["label"], arrow, tail, t["action"]))
-        elif d is not None:
-            move = "再跌 %.2f%%" % (abs(d) * 100) if d < 0 else "再涨 %.2f%%" % (d * 100)
-            lines.append("· %s：%s → %s" % (t["label"], move, t["action"]))
+    # triggers 已按接近程度降序，第一条就是最该盯的
+    if triggers:
+        head = triggers[0]
+        lines.append("")
+        lines.append("【最接近触发】%s" % head["action"])
+        lines.append("  %s（%s）" % (head["short"], head["cond"]))
+        for t in triggers[1:3]:
+            lines.append("· %s：%s → %s" % (t["label"], t["short"], t["action"]))
     lines.append("")
     lines.append("数据截至 %s" % daily["updated"])
     return "\n".join(lines)
@@ -144,7 +144,7 @@ def main():
     try:
         start = cfg.get("start_date") or S.earliest_start(daily)
         res = S.run(daily, start, float(cfg.get("initial_capital", 100000)))
-        triggers = S.next_triggers(daily, res)
+        triggers = S.next_triggers(daily, res, cfg.get("names"))
     except Exception as exc:                                         # noqa: BLE001
         print("  策略计算失败: %r" % exc)
 

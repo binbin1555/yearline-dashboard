@@ -146,49 +146,63 @@ function nextTriggers(d, ind, res) {
   const out = [];
 
   if (res.state === 'CYB') {
-    const gap = cyb / ma[i] - 1;
-    out.push({ label: '创业板出场', cond: `收盘跌破 MA250 ${ma[i].toFixed(2)}`,
-      right: `尚有 <b>${(gap * 100).toFixed(2)}%</b> 缓冲`,
-      progress: 1 - clamp(gap / 0.20, 0, 1),
-      marks: [ma[i].toFixed(2), `现价 ${cyb.toFixed(2)}`, ''],
-      action: '清仓创业板50，转入红利腿' });
+    const buf = cyb / ma[i] - 1;
+    out.push({ label: '创业板出场', action: `清仓${NAME.cyb}，转入${NAME.hl}腿`,
+      cond: `收盘跌破 MA250 ${ma[i].toFixed(2)}`,
+      headline: `距出场线尚有 <b>${(buf * 100).toFixed(2)}%</b> 缓冲`,
+      short: `尚有 ${(buf * 100).toFixed(2)}% 缓冲`,
+      progress: 1 - clamp(buf / 0.20, 0, 1),
+      marks: [`出场线 ${ma[i].toFixed(2)}`, `现价 ${cyb.toFixed(2)}`, ''] });
+
     if (!res.took && res.entryPx) {
       const tgt = res.entryPx * (1 + TAKE_PROFIT), g = cyb / res.entryPx - 1;
-      out.push({ label: '创业板止盈一半', cond: `指数涨至 ${tgt.toFixed(2)}（段内 +80%）`,
-        right: `段内已 <b>${(g * 100).toFixed(1)}%</b>`,
+      out.push({ label: '创业板止盈一半', action: `卖出一半${NAME.cyb}`,
+        cond: `本段涨幅达 +80%，即指数涨到 ${tgt.toFixed(2)}`,
+        headline: `本段已涨 <b>${(g * 100).toFixed(1)}%</b> ／ 需 +80%`,
+        short: `本段已涨 ${(g * 100).toFixed(1)}%`,
         progress: clamp(g / TAKE_PROFIT, 0, 1),
-        marks: [`进场 ${res.entryPx.toFixed(2)}`, `现价 ${cyb.toFixed(2)}`, tgt.toFixed(2)],
-        action: '卖出一半创业板50' });
+        marks: [`进场 ${res.entryPx.toFixed(2)}`, `现价 ${cyb.toFixed(2)}`, tgt.toFixed(2)] });
     }
   } else {
+    // 进场需同时满足「站上均线」和「放量」，取更难的那个作为距离
     const ratio = av[i] ? amt / av[i] : null;
-    const above = cyb > ma[i];
-    out.push({ label: '创业板进场',
-      cond: above ? `已站上 MA250 ${ma[i].toFixed(2)}，等放量`
-                  : `需站上 MA250 ${ma[i].toFixed(2)}（再涨 ${((ma[i] / cyb - 1) * 100).toFixed(2)}%）`,
-      right: ratio ? `量能 <b>${ratio.toFixed(2)}×</b> ／ 需 1.30×` : '数据不足',
-      progress: ratio ? clamp(ratio / VOL_K, 0, 1) : 0,
-      marks: [`当前 ${yi(amt)}`, '', `需 ${yi(VOL_K * av[i])}`],
-      action: '全仓买入创业板50' });
+    const priceProg = clamp(cyb / ma[i], 0, 1);
+    const volProg = ratio ? clamp(ratio / VOL_K, 0, 1) : 0;
+    const volBinding = volProg <= priceProg;
+    out.push({ label: '创业板进场', action: `全仓买入${NAME.cyb}`,
+      cond: cyb > ma[i]
+        ? `已站上 MA250 ${ma[i].toFixed(2)}，只差放量`
+        : `需站上 MA250 ${ma[i].toFixed(2)}，且成交额达 1.30×`,
+      headline: volBinding
+        ? `成交额 <b>${(ratio || 0).toFixed(2)}×</b> ／ 需 1.30×`
+        : `再涨 <b>${((ma[i] / cyb - 1) * 100).toFixed(2)}%</b> 站上均线`,
+      short: volBinding ? `量能 ${(ratio || 0).toFixed(2)}×／1.30×`
+                        : `再涨 ${((ma[i] / cyb - 1) * 100).toFixed(2)}%`,
+      progress: Math.min(priceProg, volProg),
+      marks: [`当前 ${yi(amt)}`, '', av[i] ? `需 ${yi(VOL_K * av[i])}` : ''] });
 
     if (res.tier < 3 && mah[i]) {
       const t = TIERS[res.tier], price = mah[i] * t, need = price / hl - 1;
-      out.push({ label: `红利第 ${res.tier + 1} 档买入`,
+      out.push({ label: `红利第 ${res.tier + 1} 档买入`, action: `买入 1/3 仓${NAME.hl}`,
         cond: `跌破 ${price.toFixed(2)}（MA250 −${Math.round((1 - t) * 100)}%）`,
-        right: `再跌 <b>${Math.abs(need * 100).toFixed(2)}%</b>`,
+        headline: `再跌 <b>${Math.abs(need * 100).toFixed(2)}%</b>`,
+        short: `再跌 ${Math.abs(need * 100).toFixed(2)}%`,
         progress: clamp((mah[i] - hl) / (mah[i] - price), 0, 1),
-        marks: [`MA250 ${mah[i].toFixed(2)}`, `现价 ${hl.toFixed(2)}`, price.toFixed(2)],
-        action: '买入 1/3 仓红利' });
+        marks: [`MA250 ${mah[i].toFixed(2)}`, `现价 ${hl.toFixed(2)}`, price.toFixed(2)] });
     }
     if (res.tier > 0 && mah[i]) {
       const need = mah[i] / hl - 1;
-      out.push({ label: '红利止盈', cond: `涨回 MA250 ${mah[i].toFixed(2)}`,
-        right: `再涨 <b>${(need * 100).toFixed(2)}%</b>`,
+      out.push({ label: '红利止盈', action: `清空全部${NAME.hl}仓位，回到现金`,
+        cond: `涨回 MA250 ${mah[i].toFixed(2)}`,
+        headline: `再涨 <b>${(need * 100).toFixed(2)}%</b>`,
+        short: `再涨 ${(need * 100).toFixed(2)}%`,
         progress: clamp(1 - need / 0.10, 0, 1),
-        marks: [`现价 ${hl.toFixed(2)}`, '', mah[i].toFixed(2)],
-        action: '清空全部红利仓位，回到现金' });
+        marks: [`现价 ${hl.toFixed(2)}`, '', mah[i].toFixed(2)] });
     }
   }
+
+  // 按接近程度排序，最近的排第一 —— 页面和推送都以此为准
+  out.sort((a, b) => b.progress - a.progress);
   return out;
 }
 
@@ -234,17 +248,32 @@ function renderAlert(d, res) {
 }
 
 function renderTracks(list) {
-  $('tracks').innerHTML = list.map(t => {
-    const p = clamp(t.progress ?? 0, 0, 1);
-    const cls = p >= 0.85 ? ' near' : '';
-    const marks = (t.marks || ['', '', '']).map(m => `<span>${m}</span>`).join('');
-    return `<div class="track">
-      <div class="lab"><span>${t.label} · ${t.cond}</span><span class="r">${t.right}</span></div>
-      <div class="rail${cls}"><div class="fill" style="width:${(p * 100).toFixed(1)}%"></div></div>
-      <div class="mark">${marks}</div>
-      <div class="act">→ ${t.action}</div>
-    </div>`;
-  }).join('');
+  if (!list.length) { $('tracks').innerHTML = ''; return; }
+  const [lead, ...rest] = list;
+  const p = clamp(lead.progress ?? 0, 0, 1);
+  const hot = p >= 0.85;
+  const marks = (lead.marks || ['', '', '']).map(m => `<span>${m}</span>`).join('');
+
+  let html = `<div class="lead${hot ? ' hot' : ''}">
+    <div class="eyebrow">${hot ? '即将触发' : '最接近触发'}</div>
+    <div class="act">${lead.action}</div>
+    <div class="gap">${lead.headline}</div>
+    <div class="rail${hot ? ' near' : ''}"><div class="fill" style="width:${(p * 100).toFixed(1)}%"></div></div>
+    <div class="mark">${marks}</div>
+    <div class="cond">触发条件：${lead.cond}</div>
+  </div>`;
+
+  if (rest.length) {
+    html += `<div class="rest"><div class="hd">其它触发点</div>` + rest.map(t => {
+      const q = clamp(t.progress ?? 0, 0, 1);
+      return `<div class="item">
+        <span class="n">${t.label} → ${t.action}</span>
+        <span class="minirail"><i style="width:${(q * 100).toFixed(1)}%"></i></span>
+        <span class="g">${t.short}</span>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  $('tracks').innerHTML = html;
 }
 
 function renderStats(res) {
