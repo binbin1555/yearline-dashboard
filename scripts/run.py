@@ -181,6 +181,21 @@ def main():
              % (why, daily["updated"]), level="timeSensitive", url=page_url)
         return 1
 
+    # 1.5) 手动勾选「强制测试推送」：不管是不是交易日都发一条，用于验证 BARK_KEY
+    if (os.environ.get("TEST_PUSH") or "").strip().lower() in ("1", "true", "yes"):
+        if res:
+            body = build_body(cfg, res, triggers, daily)
+        else:
+            body = "策略引擎未能计算，但数据抓取正常（截至 %s）。" % daily["updated"]
+        ok = bark("✅ 测试推送 · 配置正常",
+                  "能看到这条，说明 BARK_KEY、令牌、cron-job、Actions 全链路都通了。\n\n"
+                  + body, level="timeSensitive", url=page_url)
+        if not ok:
+            print("  测试推送失败：BARK_KEY 可能未配置或填错")
+            return 1
+        print("  测试推送已发出")
+        return 0
+
     # 2) 非交易日静默
     is_trading_day = daily["updated"] == today.strftime("%Y-%m-%d")
     if not is_trading_day:

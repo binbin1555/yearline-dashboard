@@ -6,6 +6,11 @@ on:
   repository_dispatch:
     types: [daily-update]
   workflow_dispatch:
+    inputs:
+      test_push:
+        description: '强制发一条测试推送（用于验证 BARK_KEY 配置正确，非交易日也会发）'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -34,6 +39,7 @@ jobs:
           BARK_KEY: ${{ secrets.BARK_KEY }}
           # 仅自建 Bark 服务器时需要；未设置则用官方 api.day.app
           BARK_HOST: ${{ secrets.BARK_HOST }}
+          TEST_PUSH: ${{ inputs.test_push }}
         run: python scripts/run.py
 
       # 无论成功与否都提交：status.json 里记录了失败原因，页面要能显示
