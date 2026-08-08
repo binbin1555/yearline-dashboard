@@ -9,8 +9,8 @@
     "hl": "红利"
   },
 
-  "_page_url说明": "发布到 GitHub Pages 之后，把下面这行改成你的真实网址，Bark 推送就能点击直达。没改之前推送里不会带链接，不影响其它功能。",
-  "page_url": "",
+  "_page_url说明": "Bark 推送的点击跳转地址。",
+  "page_url": "https://binbin1555.github.io/yearline-dashboard/",
 
   "lookback_days": 90,
   "alert_stale_days": 10,
