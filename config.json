@@ -13,6 +13,9 @@
   "page_url": "https://binbin1555.github.io/yearline-dashboard/",
 
   "lookback_days": 90,
-  "alert_stale_days": 10,
+
+  "_alert_stale_days说明": "历史上A股最长休市间隔为 11 个自然日（春节/国庆多次出现），设 10 会在长假误报。设 14 留足余量。真正的抓取故障由 fetch_ok 当场告警，不受此阈值影响。",
+  "alert_stale_days": 14,
+
   "final_after_hour": 17
 }
