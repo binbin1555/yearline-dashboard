@@ -4,7 +4,8 @@
  */
 'use strict';
 
-const MA_N = 250, VOL_N = 20, VOL_K = 1.3, TAKE_PROFIT = 0.80;
+const MA_N = 250, SLOPE_N = 20, TAKE_PROFIT = 0.80;
+const VOL_N = 20;                 // 成交额仅用于展示，v2.0 起不参与进场判定
 const TIERS = [0.96, 0.93, 0.90], COST = 0.0002;
 const CASH_ANNUAL = 0.015, TRADING_DAYS = 243;
 const LS = 'yearline.v1';
@@ -46,16 +47,21 @@ const tiersAt = (d, ind, i) => {
   return TIERS.reduce((c, t) => c + (r <= t ? 1 : 0), 0);
 };
 
+// v2.0 进场条件②：MA250 本身在上行
+const slopeUp = (ma, i) =>
+  i >= SLOPE_N && ma[i] != null && ma[i - SLOPE_N] != null && ma[i] > ma[i - SLOPE_N];
+
 function earliestStart(d, ind) {
   for (let i = 0; i < d.dates.length; i++)
-    if (ind.ma[i] && ind.av[i] && ind.mah[i] && d.cyb50[i]) return d.dates[i];
+    if (ind.ma[i] && ind.mah[i] && d.cyb50[i] && i >= SLOPE_N && ind.ma[i - SLOPE_N])
+      return d.dates[i];
   return d.dates[0];
 }
 
 /* ------------------------------------------------------------------ 重放 */
 function run(d, ind, startDate, capital) {
-  const { ma, mah, av } = ind, n = d.dates.length;
-  const usable = i => ma[i] && av[i] && mah[i] && d.cyb50[i];
+  const { ma, mah } = ind, n = d.dates.length;
+  const usable = i => ma[i] && mah[i] && d.cyb50[i] && i >= SLOPE_N && ma[i - SLOPE_N] != null;
 
   let s = -1;
   for (let i = 0; i < n; i++) if (d.dates[i] >= startDate && usable(i)) { s = i; break; }
@@ -116,7 +122,8 @@ function run(d, ind, startDate, capital) {
     if (!pend) {
       const nxt = Math.min(i + 1, n - 1);
       if (state === 'HL') {
-        if (d.cyb_sig[i] > ma[i] && av[i] && d.cyb_amt[i] >= VOL_K * av[i]) pend = ['CYB', nxt, i];
+        // v2.0：站上均线 + 均线本身上行。成交额不再参与判定。
+        if (d.cyb_sig[i] > ma[i] && slopeUp(ma, i)) pend = ['CYB', nxt, i];
       } else if (d.cyb_sig[i] < ma[i]) pend = ['HL', nxt, i];
       else if (!took && entryPx && d.cyb_sig[i] / entryPx - 1 >= TAKE_PROFIT) pend = ['HALF', nxt, i];
     }
@@ -164,22 +171,32 @@ function nextTriggers(d, ind, res) {
         marks: [`进场 ${res.entryPx.toFixed(2)}`, `现价 ${cyb.toFixed(2)}`, tgt.toFixed(2)] });
     }
   } else {
-    // 进场需同时满足「站上均线」和「放量」，取更难的那个作为距离
-    const ratio = av[i] ? amt / av[i] : null;
+    // v2.0 进场需同时满足「站上均线」和「均线上行」，取更难的那个作为距离
+    const prev = i >= SLOPE_N ? ma[i - SLOPE_N] : null;
     const priceProg = clamp(cyb / ma[i], 0, 1);
-    const volProg = ratio ? clamp(ratio / VOL_K, 0, 1) : 0;
-    const volBinding = volProg <= priceProg;
+    const slopeProg = prev ? clamp(ma[i] / prev, 0, 1) : 0;
+    const priceOk = cyb > ma[i], slopeOk = slopeUp(ma, i);
+    const slopePct = prev ? (ma[i] / prev - 1) * 100 : 0;
+    const upPct = (ma[i] / cyb - 1) * 100;
+    let headline, short, cond;
+    if (!slopeOk && prev) {
+      headline = `MA250 仍在下行 <b>${slopePct.toFixed(2)}%</b>（较20日前）`;
+      short = `均线下行 ${slopePct.toFixed(2)}%`;
+    } else if (!priceOk) {
+      headline = `再涨 <b>${upPct.toFixed(2)}%</b> 站上 MA250`;
+      short = `再涨 ${upPct.toFixed(2)}%`;
+    } else {
+      headline = `两条均已满足，等待 T+1 执行`;
+      short = '条件已满足';
+    }
+    cond = priceOk && slopeOk ? `已站上 MA250 ${ma[i].toFixed(2)}，且均线上行`
+         : priceOk ? `已站上 MA250 ${ma[i].toFixed(2)}，但均线仍需转为上行`
+         : `需站上 MA250 ${ma[i].toFixed(2)}，且 MA250 高于20日前`;
     out.push({ label: '创业板进场', action: `全仓买入${NAME.cyb}`,
-      cond: cyb > ma[i]
-        ? `已站上 MA250 ${ma[i].toFixed(2)}，只差放量`
-        : `需站上 MA250 ${ma[i].toFixed(2)}，且成交额达 1.30×`,
-      headline: volBinding
-        ? `成交额 <b>${(ratio || 0).toFixed(2)}×</b> ／ 需 1.30×`
-        : `再涨 <b>${((ma[i] / cyb - 1) * 100).toFixed(2)}%</b> 站上均线`,
-      short: volBinding ? `量能 ${(ratio || 0).toFixed(2)}×／1.30×`
-                        : `再涨 ${((ma[i] / cyb - 1) * 100).toFixed(2)}%`,
-      progress: Math.min(priceProg, volProg),
-      marks: [`当前 ${yi(amt)}`, '', av[i] ? `需 ${yi(VOL_K * av[i])}` : ''] });
+      cond, headline, short,
+      progress: Math.min(priceProg, slopeProg),
+      marks: [`MA250 20日前 ${prev ? prev.toFixed(2) : '—'}`,
+              `现价 ${cyb.toFixed(2)}`, `MA250 今日 ${ma[i].toFixed(2)}`] });
 
     if (res.tier < 3 && mah[i]) {
       const t = TIERS[res.tier], price = mah[i] * t, need = price / hl - 1;

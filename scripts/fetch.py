@@ -193,11 +193,19 @@ def fetch_recent(lookback_days=90):
     return series, log
 
 
-REQUIRED = ("cyb_sig", "cyb_amt", "cyb50", "hl_sig", "hl_tr")
+# v2.0 起进场条件不再使用成交额，因此 cyb_amt 降级为可选。
+# 它此前是唯一的单点故障（只有雪球提供指数成交额，没有备源），
+# 降级后某天抓不到也不会阻塞整个交易日的数据写入。
+REQUIRED = ("cyb_sig", "cyb50", "hl_sig", "hl_tr")
+OPTIONAL = ("cyb_amt",)
+ALL_KEYS = REQUIRED + OPTIONAL
 
 
 def merge(daily, series):
-    """把新抓到的序列并入 daily。只有五个序列齐全的交易日才会被写入。
+    """把新抓到的序列并入 daily。
+
+    REQUIRED 四个序列必须齐全，缺一个则整天跳过；
+    OPTIONAL（成交额）缺失时写入 None，保证各列长度始终对齐。
 
     返回 (新增日期列表, 修订日期列表)。
     """
@@ -205,6 +213,11 @@ def merge(daily, series):
     candidates = set()
     for k in REQUIRED:
         candidates |= set(series.get(k, {}))
+
+    def norm(k, v):
+        if v is None:
+            return None
+        return int(v) if k == "cyb_amt" else round(v, 2)
 
     added, revised = [], []
     for d in sorted(candidates):
@@ -215,22 +228,31 @@ def merge(daily, series):
             if v is None:
                 complete = False
                 break
-            vals[k] = round(v, 2) if k != "cyb_amt" else int(v)
+            vals[k] = norm(k, v)
         if not complete:
             continue
+        for k in OPTIONAL:
+            vals[k] = norm(k, series.get(k, {}).get(d))
 
         if d in idx:                                   # 已有：仅修订明显偏差
             i = idx[d]
-            changed = any(daily[k][i] is None
-                          or abs((daily[k][i] or 0) - vals[k]) > max(0.02, abs(vals[k]) * 1e-4)
-                          for k in REQUIRED)
+            changed = False
+            for k in REQUIRED:
+                old = daily[k][i]
+                if old is None or abs(old - vals[k]) > max(0.02, abs(vals[k]) * 1e-4):
+                    changed = True
+                    break
             if changed:
                 for k in REQUIRED:
                     daily[k][i] = vals[k]
+                # 可选列只在这次确实拿到值时才覆盖，避免把已有数据抹成 None
+                for k in OPTIONAL:
+                    if vals[k] is not None:
+                        daily[k][i] = vals[k]
                 revised.append(d)
         elif d > daily["dates"][-1]:                   # 新增：只接受更晚的日期
             daily["dates"].append(d)
-            for k in REQUIRED:
+            for k in ALL_KEYS:
                 daily[k].append(vals[k])
             added.append(d)
 
