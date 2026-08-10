@@ -79,7 +79,6 @@ def run(daily, start_date, capital=100000.0):
     """从 start_date 起重放策略。返回 dict。"""
     dates = daily["dates"]
     cyb, hl = daily["cyb_sig"], daily["hl_sig"]
-    amt = daily["cyb_amt"]
     c50, htr = daily["cyb50"], daily["hl_tr"]
     ma, av, mah = indicators(daily)
     n = len(dates)
@@ -222,7 +221,7 @@ def next_triggers(daily, res, names=None):
     n_hl = names.get("hl", "红利")
     i = len(daily["dates"]) - 1
     ma, av, mah = indicators(daily)
-    cyb, hl, amt = daily["cyb_sig"], daily["hl_sig"], daily["cyb_amt"]
+    cyb, hl = daily["cyb_sig"], daily["hl_sig"]
     out = []
 
     if res["state"] == "CYB":

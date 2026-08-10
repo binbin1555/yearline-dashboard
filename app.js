@@ -16,7 +16,6 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const pct = (x, d = 2) =>
   (Math.abs(x) < 5e-5 ? '' : x > 0 ? '+' : '−') + Math.abs(x * 100).toFixed(d) + '%';
 const money = x => x.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
-const yi = x => (x / 1e4).toFixed(0) + ' 亿';          // cyb_amt 单位是万元
 const sign = x => (x > 1e-9 ? 'up' : x < -1e-9 ? 'down' : 'flat');
 
 function sma(xs, n, i) {
@@ -149,7 +148,7 @@ function run(d, ind, startDate, capital) {
 /* -------------------------------------------------------------- 下一步 */
 function nextTriggers(d, ind, res) {
   const i = d.dates.length - 1, { ma, mah, av } = ind;
-  const cyb = d.cyb_sig[i], hl = d.hl_sig[i], amt = d.cyb_amt[i];
+  const cyb = d.cyb_sig[i], hl = d.hl_sig[i];
   const out = [];
 
   if (res.state === 'CYB') {
