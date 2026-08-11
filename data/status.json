@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-08-10 21:20:34+08:00",
- "data_updated": "2026-08-10",
+ "generated_at": "2026-08-11 21:20:29+08:00",
+ "data_updated": "2026-08-11",
  "stale_days": 0,
  "fetch_ok": true,
  "added": [
-  "2026-08-10"
+  "2026-08-11"
  ],
  "revised": [],
  "log": [
@@ -22,29 +22,29 @@
   "w_hl": 0.0,
   "w_cash": 0.0
  },
- "equity": 1849856.6675858053,
- "total_return": -7.747698064575204e-05,
+ "equity": 1858712.7402931433,
+ "total_return": 0.004709589347644982,
  "cagr": null,
  "max_drawdown": -0.00013874036706951198,
  "start": "2026-08-07",
- "days": 2,
+ "days": 3,
  "pending": null,
  "triggers": [
   {
    "key": "cyb_exit",
    "label": "创业板出场",
    "action": "清仓创业板50，转入红利腿",
-   "cond": "收盘跌破 MA250 3337.39",
-   "short": "尚有 5.99% 缓冲",
-   "progress": 0.7006394092251391
+   "cond": "收盘跌破 MA250 3342.12",
+   "short": "尚有 6.19% 缓冲",
+   "progress": 0.6902550858211178
   },
   {
    "key": "cyb_half",
    "label": "创业板止盈一半",
    "action": "卖出一半创业板50",
    "cond": "本段涨幅达 +80%，即指数涨到 6366.98",
-   "short": "本段已涨 0.0%",
-   "progress": 0.0
+   "short": "本段已涨 0.3%",
+   "progress": 0.004222961034261452
   }
  ],
  "recent_events": [
