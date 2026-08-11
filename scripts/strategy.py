@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """策略引擎 —— 与回测逐行一致的实现。
 
-规则（v2.0）
+规则（v3.0）
 -----------
 创业板腿（信号取自 399006 创业板指）
-  进场  收盘 > MA250  且  MA250(今日) > MA250(20个交易日前)
+  进场  收盘 > MA250  且  当日成交额 >= 前20日均额 x 1.3
   出场  收盘 < MA250（无缓冲、无连续日确认）
   止盈  段内涨幅（自本段进场执行日收盘价算起）首次 >= 80% -> 卖出一半，每段一次
   持仓收益来自 399673 创业板50（信号与标的分离，是刻意选择）
@@ -21,9 +21,8 @@
 """
 
 MA_N = 250
-SLOPE_N = 20          # v2.0：判断 MA250 是否上行的回看窗口（交易日）
-VOL_N = 20            # 成交额仅用于页面展示，不再参与进场判定
-VOL_K = 1.3
+VOL_N = 20            # v3.0：成交额均值窗口（前 N 个交易日，不含当日）
+VOL_K = 1.3           # v3.0：进场要求 当日成交额 >= 前20日均额 × 1.3
 TAKE_PROFIT = 0.80
 TIERS = (0.96, 0.93, 0.90)
 COST = 0.0002
@@ -60,17 +59,20 @@ def tiers_at(hl, mah, i):
     return sum(1 for t in TIERS if r <= t)
 
 
-def slope_up(ma, i):
-    """v2.0 进场条件②：MA250 本身在上行。"""
-    return i >= SLOPE_N and ma[i] is not None and ma[i - SLOPE_N] is not None \
-        and ma[i] > ma[i - SLOPE_N]
+def vol_ok(amt, av, i):
+    """v3.0 进场条件②：当日成交额 >= 前20日均额 × 1.3。
+
+    成交额缺失（av 或 amt 为 None）时返回 False —— 即「拿不到量能数据就不进场」，
+    这是保守默认：宁可漏掉一次进场，也不在数据不全时买入。
+    """
+    return av[i] is not None and amt[i] is not None and amt[i] >= VOL_K * av[i]
 
 
 def earliest_start(daily):
     """最早可用起点：信号可算 且 创业板50 有数据。"""
     ma, av, mah = indicators(daily)
     for i, d in enumerate(daily["dates"]):
-        if ma[i] and mah[i] and daily["cyb50"][i] and i >= SLOPE_N and ma[i - SLOPE_N]:
+        if ma[i] and av[i] and mah[i] and daily["cyb50"][i]:
             return d
     return None
 
@@ -79,13 +81,13 @@ def run(daily, start_date, capital=100000.0):
     """从 start_date 起重放策略。返回 dict。"""
     dates = daily["dates"]
     cyb, hl = daily["cyb_sig"], daily["hl_sig"]
+    amt = daily["cyb_amt"]
     c50, htr = daily["cyb50"], daily["hl_tr"]
     ma, av, mah = indicators(daily)
     n = len(dates)
 
     def usable(i):
-        return (ma[i] and mah[i] and c50[i]
-                and i >= SLOPE_N and ma[i - SLOPE_N] is not None)
+        return bool(ma[i] and av[i] and mah[i] and c50[i])
 
     s = None
     for i, d in enumerate(dates):
@@ -177,8 +179,8 @@ def run(daily, start_date, capital=100000.0):
         if not pend:
             nxt = min(i + 1, n - 1)
             if state == "HL":
-                # v2.0：站上均线 + 均线本身上行。成交额不再参与判定。
-                if cyb[i] > ma[i] and slope_up(ma, i):
+                # v3.0：站上均线 + 放量。均线斜率不再参与判定。
+                if cyb[i] > ma[i] and vol_ok(amt, av, i):
                     pend = ("CYB", nxt, i)
             else:
                 if cyb[i] < ma[i]:
@@ -221,7 +223,7 @@ def next_triggers(daily, res, names=None):
     n_hl = names.get("hl", "红利")
     i = len(daily["dates"]) - 1
     ma, av, mah = indicators(daily)
-    cyb, hl = daily["cyb_sig"], daily["hl_sig"]
+    cyb, hl, amt = daily["cyb_sig"], daily["hl_sig"], daily["cyb_amt"]
     out = []
 
     if res["state"] == "CYB":
@@ -240,27 +242,26 @@ def next_triggers(daily, res, names=None):
                         "short": "本段已涨 %.1f%%" % (g * 100),
                         "progress": _clamp(g / TAKE_PROFIT)})
     else:
-        # v2.0 进场需同时满足「站上均线」和「均线上行」，取更难的那个作为距离
-        prev = ma[i - SLOPE_N] if i >= SLOPE_N else None
+        # v3.0 进场需同时满足「站上均线」和「放量」，取更难的那个作为距离
+        ratio = (amt[i] / av[i]) if (av[i] and amt[i] is not None) else None
         price_prog = _clamp(cyb[i] / ma[i])
-        slope_prog = _clamp(ma[i] / prev) if prev else 0.0
-        price_ok, slope_ok = cyb[i] > ma[i], slope_up(ma, i)
-        if not slope_ok and prev:
-            short = "均线仍在下行（较20日前 %.2f%%）" % ((ma[i] / prev - 1) * 100)
-        elif not price_ok:
+        vol_prog = _clamp(ratio / VOL_K) if ratio else 0.0
+        price_ok = cyb[i] > ma[i]
+        vol_binding = vol_prog <= price_prog
+        if ratio is None:
+            short = "成交额数据缺失"
+        elif vol_binding:
+            short = "量能 %.2f×／需 %.2f×" % (ratio, VOL_K)
+        else:
             short = "再涨 %.2f%%" % ((ma[i] / cyb[i] - 1) * 100)
+        if price_ok:
+            cond = "已站上 MA250 %.2f，只差放量至 %.2f×" % (ma[i], VOL_K)
         else:
-            short = "两条均已满足"
-        if price_ok and slope_ok:
-            cond = "已站上 MA250 %.2f 且均线上行" % ma[i]
-        elif price_ok:
-            cond = "已站上 MA250 %.2f，但均线仍需转为上行" % ma[i]
-        else:
-            cond = "需站上 MA250 %.2f，且 MA250 高于20日前" % ma[i]
+            cond = "需站上 MA250 %.2f，且成交额达 %.2f×" % (ma[i], VOL_K)
         out.append({"key": "cyb_entry", "label": "创业板进场",
                     "action": "全仓买入%s" % n_cyb,
                     "cond": cond, "short": short,
-                    "progress": min(price_prog, slope_prog)})
+                    "progress": min(price_prog, vol_prog)})
         tier = res["tier"]
         if tier < 3 and mah[i]:
             t = TIERS[tier]

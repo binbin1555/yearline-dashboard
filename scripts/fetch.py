@@ -242,13 +242,20 @@ def merge(daily, series):
                 if old is None or abs(old - vals[k]) > max(0.02, abs(vals[k]) * 1e-4):
                     changed = True
                     break
+            filled = False
+            for k in OPTIONAL:
+                # 可选列：只补空，不覆盖已有值。v3.0 起成交额重新参与进场判定，
+                # 必须能在后续抓取中把之前缺失的补回来，否则会连续20天无法评估进场。
+                if daily[k][i] is None and vals[k] is not None:
+                    daily[k][i] = vals[k]
+                    filled = True
             if changed:
                 for k in REQUIRED:
                     daily[k][i] = vals[k]
-                # 可选列只在这次确实拿到值时才覆盖，避免把已有数据抹成 None
                 for k in OPTIONAL:
                     if vals[k] is not None:
                         daily[k][i] = vals[k]
+            if changed or filled:
                 revised.append(d)
         elif d > daily["dates"][-1]:                   # 新增：只接受更晚的日期
             daily["dates"].append(d)
