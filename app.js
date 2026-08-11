@@ -9,6 +9,9 @@ const VOL_N = 20, VOL_K = 1.3;    // v3.0：当日成交额 >= 前20日均额 ×
 const TIERS = [0.96, 0.93, 0.90], COST = 0.0002;
 const CASH_ANNUAL = 0.015, TRADING_DAYS = 243;
 const LS = 'yearline.v1';
+// 规则版本。改规则时必须同时改这里和 index.html 的 ?v= 查询串，
+// 否则浏览器会用缓存的旧 app.js 去算新数据 —— 会给出错误的操作指令。
+const RULE_VERSION = 'v3.0 · 量能1.3×';
 
 /* ---------------------------------------------------------------- 工具 */
 const $ = id => document.getElementById(id);
@@ -385,6 +388,7 @@ function savePrefs(p) { localStorage.setItem(LS, JSON.stringify(p)); }
     const foot = document.querySelector('.foot');
     foot.classList.toggle('stale', stale > 10);
     $('data-note').textContent = `数据截至 ${daily.updated}` + (stale > 10 ? '（已停滞，请检查抓取任务）' : '');
+    $('ver-note').textContent = `规则 ${RULE_VERSION}`;
 
     $('cfg-capital').value = capital;
     $('cfg-start').value = start;
