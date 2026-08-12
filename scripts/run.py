@@ -63,6 +63,12 @@ def pct(x, digits=2):
     return ("%+." + str(digits) + "f%%") % (x * 100)
 
 
+# 待执行动作的文案。必须与 app.js 的 ACT_TITLE 逐字一致 —— 页面和推送同源同文。
+ACT_TEXT = {"CYB": "全仓买入创业板50",
+            "HL": "清仓创业板50，转入红利腿",
+            "HALF": "卖出一半创业板50"}
+
+
 def build_body(cfg, res, triggers, daily):
     names = cfg.get("names", {})
     n_cyb = names.get("cyb", "创业板50")
@@ -81,21 +87,35 @@ def build_body(cfg, res, triggers, daily):
     else:
         pos = "空仓（现金 100%）"
 
-    lines = ["持仓：%s" % pos,
+    # 第一行必须回答「今天做什么」。锁屏只显示前两行，候选动作绝不能出现在这里，
+    # 否则「全仓买入创业板50」会被读成命令 —— 与页面 verdictOf() 同一口径。
+    pending = res.get("pending")
+    if pending:
+        when = pending.get("exec_date") or "下一个交易日"
+        verdict = "【今日指令】%s 收盘执行：%s" % (when, ACT_TEXT[pending["action"]])
+    else:
+        hold = ("持有%s" % n_cyb) if res["state"] == "CYB" else \
+               ("持有%s %d/3 仓" % (n_hl, res["tier"])) if res["tier"] > 0 else "持有现金"
+        verdict = "【今日指令】不操作，继续%s" % hold
+
+    lines = [verdict,
+             "",
+             "持仓：%s" % pos,
              "净值：%s（%s）" % ("{:,.0f}".format(res["equity"]), pct(res["total_return"]))]
     if res["cagr"] is not None:
         lines.append("年化：%s ／ 最大回撤：%s" % (pct(res["cagr"]), pct(res["max_drawdown"])))
     else:
         lines.append("最大回撤：%s（运行未满一月，年化暂不显示）" % pct(res["max_drawdown"]))
 
-    # triggers 已按接近程度降序，第一条就是最该盯的
+    # triggers 已按接近程度降序，第一条就是最该盯的。一律写成「距 X」而非祈使句。
     if triggers:
         head = triggers[0]
         lines.append("")
-        lines.append("【最接近触发】%s" % head["action"])
-        lines.append("  %s（%s）" % (head["short"], head["cond"]))
+        lines.append("── %s ──" % ("其它观察点" if pending else "观察点（均未触发）"))
+        lines.append("距「%s」：%s" % (head["action"], head["short"]))
+        lines.append("  触发条件：%s" % head["cond"])
         for t in triggers[1:3]:
-            lines.append("· %s：%s → %s" % (t["label"], t["short"], t["action"]))
+            lines.append("距「%s」：%s" % (t["label"], t["short"]))
     lines.append("")
     lines.append("数据截至 %s" % daily["updated"])
     return "\n".join(lines)
@@ -211,18 +231,15 @@ def main():
     pending = res["pending"]
     if pending:
         title = "🔴 明日需操作 · %s" % {"CYB": "进场", "HL": "出场", "HALF": "止盈一半"}[pending["action"]]
-        head = {"CYB": "全仓买入创业板50", "HL": "清仓创业板50", "HALF": "卖出一半创业板50"}[pending["action"]]
-        when = pending["exec_date"] or "下一个交易日"
-        body = "【%s】于 %s 收盘执行\n\n%s" % (head, when,
-                                              build_body(cfg, res, triggers, daily))
-        bark(title, body, level="timeSensitive", url=page_url)
+        bark(title, build_body(cfg, res, triggers, daily), level="timeSensitive", url=page_url)
     elif acted:
         title = "🟠 今日已执行 · " + "／".join(e["action"] for e in acted)
         body = "\n".join("· %s" % e["detail"] for e in acted) + "\n\n" + \
                build_body(cfg, res, triggers, daily)
         bark(title, body, level="timeSensitive", url=page_url)
     else:
-        bark("年线轮动 · %s" % daily["updated"],
+        # 标题就把答案说完，锁屏不展开也能看懂
+        bark("⚪ %s · 今日无操作" % daily["updated"],
              build_body(cfg, res, triggers, daily), level="passive", url=page_url)
     return 0
 

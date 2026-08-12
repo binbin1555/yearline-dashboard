@@ -268,31 +268,52 @@ function renderAlert(d, res) {
   box.hidden = false;
 }
 
-function renderTracks(list) {
-  if (!list.length) { $('tracks').innerHTML = ''; return; }
-  const [lead, ...rest] = list;
-  const p = clamp(lead.progress ?? 0, 0, 1);
-  const hot = p >= 0.85;
-  const marks = (lead.marks || ['', '', '']).map(m => `<span>${m}</span>`).join('');
+// 「今天我该做什么」——始终是卡片里最大的字。
+// 只有 res.pending 存在时才是命令，否则一律是「不操作」。
+// 不要把候选动作放大成命令：12 年回测里只有 11 次进场，95% 以上的日子答案是「什么都不做」。
+function verdictOf(res) {
+  if (res.pending) {
+    const when = res.pending.execDate || '下一个交易日';
+    return { cls: 'do', eyebrow: '今日指令 · 需要下单',
+             text: `${when} 收盘：${ACT_TITLE[res.pending.action]}` };
+  }
+  const hold = res.state === 'CYB' ? `持有${NAME.cyb}`
+             : res.tier > 0 ? `持有${NAME.hl} ${res.tier}/3 仓`
+             : '持有现金';
+  return { cls: 'hold', eyebrow: '今日指令', text: `不操作，继续${hold}` };
+}
 
-  let html = `<div class="lead${hot ? ' hot' : ''}">
-    <div class="eyebrow">${hot ? '即将触发' : '最接近触发'}</div>
-    <div class="act">${lead.action}</div>
-    <div class="gap">${lead.headline}</div>
-    <div class="rail${hot ? ' near' : ''}"><div class="fill" style="width:${(p * 100).toFixed(1)}%"></div></div>
-    <div class="mark">${marks}</div>
-    <div class="cond">触发条件：${lead.cond}</div>
+function renderTracks(list, res) {
+  const v = verdictOf(res);
+  let html = `<div class="lead ${v.cls}">
+    <div class="eyebrow">${v.eyebrow}</div>
+    <div class="act">${v.text}</div>
   </div>`;
 
-  if (rest.length) {
-    html += `<div class="rest"><div class="hd">其它触发点</div>` + rest.map(t => {
-      const q = clamp(t.progress ?? 0, 0, 1);
-      return `<div class="item">
-        <span class="n">${t.label} → ${t.action}</span>
-        <span class="minirail"><i style="width:${(q * 100).toFixed(1)}%"></i></span>
-        <span class="g">${t.short}</span>
-      </div>`;
-    }).join('') + `</div>`;
+  if (list.length) {
+    const [lead, ...rest] = list;
+    const p = clamp(lead.progress ?? 0, 0, 1);
+    const hot = p >= 0.85;
+    const marks = (lead.marks || ['', '', '']).map(m => `<span>${m}</span>`).join('');
+    html += `<div class="watch${hot ? ' hot' : ''}">
+      <div class="hd">${hot ? '即将触发 · 留意' : '距离最近的一个动作'}</div>
+      <div class="cand">${lead.action}<span class="tag">${hot ? '就快了' : '尚未触发'}</span></div>
+      <div class="gap">${lead.headline}</div>
+      <div class="rail${hot ? ' near' : ''}"><div class="fill" style="width:${(p * 100).toFixed(1)}%"></div></div>
+      <div class="mark">${marks}</div>
+      <div class="cond">触发条件：${lead.cond}</div>
+    </div>`;
+
+    if (rest.length) {
+      html += `<div class="rest"><div class="hd">其它观察点（均未触发）</div>` + rest.map(t => {
+        const q = clamp(t.progress ?? 0, 0, 1);
+        return `<div class="item">
+          <span class="n">距「${t.label}」</span>
+          <span class="minirail"><i style="width:${(q * 100).toFixed(1)}%"></i></span>
+          <span class="g">${t.short}</span>
+        </div>`;
+      }).join('') + `</div>`;
+    }
   }
   $('tracks').innerHTML = html;
 }
@@ -378,7 +399,7 @@ function savePrefs(p) { localStorage.setItem(LS, JSON.stringify(p)); }
     catch (e) { $('boot').hidden = false; $('boot').textContent = '计算失败：' + e.message; return; }
 
     renderAlert(daily, res);
-    renderTracks(nextTriggers(daily, ind, res));
+    renderTracks(nextTriggers(daily, ind, res), res);
     renderStats(res);
     renderHoldings(daily, ind, res);
     renderEvents(res);
