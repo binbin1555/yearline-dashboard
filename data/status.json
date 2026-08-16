@@ -1,7 +1,7 @@
 {
- "generated_at": "2026-08-15 21:20:30+08:00",
+ "generated_at": "2026-08-16 21:20:28+08:00",
  "data_updated": "2026-08-14",
- "stale_days": 1,
+ "stale_days": 2,
  "fetch_ok": true,
  "added": [],
  "revised": [],
@@ -10,8 +10,8 @@
   "OK   xueqiu SZ399006 (120)",
   "OK   xueqiu SZ399673 (120)",
   "OK   xueqiu SH000922 (120)",
-  "OK   csindex 000922 (65)",
-  "OK   csindex H00922 (65)"
+  "OK   csindex 000922 (64)",
+  "OK   csindex H00922 (64)"
  ],
  "state": "HL",
  "tier": 0,
