@@ -1,7 +1,7 @@
 {
- "generated_at": "2026-08-16 21:20:28+08:00",
+ "generated_at": "2026-08-17 21:20:30+08:00",
  "data_updated": "2026-08-14",
- "stale_days": 2,
+ "stale_days": 3,
  "fetch_ok": true,
  "added": [],
  "revised": [],
@@ -10,8 +10,9 @@
   "OK   xueqiu SZ399006 (120)",
   "OK   xueqiu SZ399673 (120)",
   "OK   xueqiu SH000922 (120)",
-  "OK   csindex 000922 (64)",
-  "OK   csindex H00922 (64)"
+  "FAIL csindex 000922: URLError",
+  "     hl_sig 降级至雪球",
+  "FAIL csindex H00922: URLError"
  ],
  "state": "HL",
  "tier": 0,
